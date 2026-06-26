@@ -416,6 +416,23 @@
     });
   }
 
+  function appendApplyResultLines(lines, results) {
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var line = "- " + (r.type || "slide");
+      if (r.slide) line += " · slide " + r.slide;
+      if (r.target) line += " · " + r.target;
+      if (r.noOp || (r.type === "format_selection" && Number(r.changed || 0) === 0)) {
+        line += " · 변경 없음";
+        if (r.noOpReason) line += " (" + r.noOpReason + ")";
+      } else if (r.changed) {
+        line += " · " + r.changed + "개 변경";
+      }
+      if (r.changedProperties && r.changedProperties.length) line += " · " + r.changedProperties.join(", ");
+      lines.push(line);
+    }
+  }
+
   function handleCommitSuccess(data) {
     lastTransactionId = data.transactionId || pendingTransactionId;
     var transaction = data.transaction || {};
@@ -425,7 +442,7 @@
     var result = data.result || {};
     var results = result.results || [];
     var target = transaction.commitTarget || null;
-    var lines = ["완료됐습니다."];
+    var lines = result.noOp ? [result.noOpReason || "변경 없음: 적용할 새 서식 변경이 없습니다."] : ["완료됐습니다."];
     if (!backup.created) {
       lines.push("별도 저장본은 만들지 않았습니다. 되돌리려면 PowerPoint에서 Ctrl+Z를 사용하세요.");
     }
@@ -435,15 +452,7 @@
         lines.push("복사본: " + (target.committedFullName || target.editableCopyPath));
       }
     }
-    for (var i = 0; i < results.length; i++) {
-      var r = results[i];
-      var line = "- " + (r.type || "slide");
-      if (r.slide) line += " · slide " + r.slide;
-      if (r.target) line += " · " + r.target;
-      if (r.changed) line += " · " + r.changed + "개 변경";
-      if (r.changedProperties && r.changedProperties.length) line += " · " + r.changedProperties.join(", ");
-      lines.push(line);
-    }
+    appendApplyResultLines(lines, results);
     addMessage("assistant", lines.join("\n"));
     refreshContext();
   }
@@ -464,21 +473,14 @@
       var result = data.result || {};
       var results = result.results || [];
       var target = data.transaction && data.transaction.commitTarget ? data.transaction.commitTarget : null;
-      var lines = ["완료했습니다."];
+      var lines = result.noOp ? [result.noOpReason || "변경 없음: 적용할 새 서식 변경이 없습니다."] : ["완료했습니다."];
       if (target && target.mode === "editable_copy") {
         lines.push("원본은 수정하지 않았고, 편집용 복사본에 적용했습니다.");
         if (target.committedFullName || target.editableCopyPath) {
           lines.push("복사본: " + (target.committedFullName || target.editableCopyPath));
         }
       }
-      for (var i = 0; i < results.length; i++) {
-        var r = results[i];
-        var line = "- " + (r.type || "slide");
-        if (r.slide) line += " · slide " + r.slide;
-        if (r.target) line += " · " + r.target;
-        if (r.changed) line += " · " + r.changed + "개 변경";
-        lines.push(line);
-      }
+      appendApplyResultLines(lines, results);
       addMessage("assistant", lines.join("\n"));
       refreshContext();
     });
