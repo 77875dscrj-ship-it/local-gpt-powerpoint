@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "defaultMode": "review",
+  "legacyActions": {
+    "allowAsAdapterUntil": "v0.4",
+    "plannerShouldPreferPrimitiveOperations": true
+  },
+  "operationRisk": {
+    "set_title": "low",
+    "set_body": "low",
+    "set_notes": "low",
+    "replace_text": "low",
+    "add_slides": "medium",
+    "add_table_slide": "medium",
+    "add_bar_chart_slide": "medium",
+    "format_selection": "medium",
+    "replace_deck": "high"
+  },
+  "preview": {
+    "requiredBeforeCommit": false,
+    "openMode": "hidden_first_visible_fallback"
+  },
+  "undo": {
+    "startNewEntryBeforeApply": true
+  },
+  "backup": {
+    "beforeCommit": false,
+    "forRiskAtLeast": "high"
+  },
+  "rollback": {
+    "primary": "backup_copy",
+    "inverseRollback": "safe_primitives_only",
+    "automaticOverwrite": false
+  },
+  "conflict": {
+    "defaultScope": "affected_slides_and_shapes",
+    "globalOperationScope": "whole_deck"
+  },
+  "selectionEdit": {
+    "requiresFrozenTarget": true,
+    "requiresStableShapeTag": true,
+    "requiresFingerprint": true,
+    "requiresPreview": true,
+    "commitEnabled": true
+  },
+  "replaceDeck": {
+    "liveCommitEnabled": false,
+    "fallback": "create_rebuilt_copy"
+  },
+  "liveDeck": {
+    "allowLiveBusinessDeckCommit": true,
+    "createEditableCopyForLiveDeck": false,
+    "commitAllowPathIncludes": [
+      "\\runtime\\test-decks\\",
+      "\\runtime\\copied-real\\",
+      "\\runtime\\canary-copies\\"
+    ]
+  },
+  "backupRetention": {
+    "normalDays": 30,
+    "failedOrRecoveryDays": 90,
+    "maxBackupsPerDeck": 20,
+    "maxTotalBytes": 5368709120
+  },
+  "testingStages": [
+    "disposable",
+    "copied_real",
+    "canary_copy",
+    "limited_live"
+  ]
+}

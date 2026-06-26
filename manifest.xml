@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TaskPaneApp">
+  <Id>6d0ef0de-25e9-4ca1-9f66-a40fc58f6f6b</Id>
+  <Version>1.0.0.1</Version>
+  <ProviderName>Local</ProviderName>
+  <DefaultLocale>ko-KR</DefaultLocale>
+  <DisplayName DefaultValue="Local GPT"/>
+  <Description DefaultValue="Local GPT helper for PowerPoint 2016."/>
+  <IconUrl DefaultValue="https://localhost:8765/icon-32.png"/>
+  <SupportUrl DefaultValue="https://localhost:8765/taskpane.html"/>
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:8765/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

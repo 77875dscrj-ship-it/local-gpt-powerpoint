@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local GPT ExecutionPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "transactionId",
+    "deckFingerprint",
+    "affectedSlideIds",
+    "maxRisk",
+    "operations",
+    "legacyActions",
+    "validation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["2.0"]
+    },
+    "transactionId": {
+      "type": "string",
+      "pattern": "^tx-[A-Za-z0-9_-]+$"
+    },
+    "planId": {
+      "type": "string",
+      "pattern": "^plan-[A-Za-z0-9_-]+$"
+    },
+    "deckFingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "affectedSlideIds": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "uniqueItems": true
+    },
+    "maxRisk": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "operations": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["opId", "changeId", "type", "risk", "target", "args", "idempotencyKey"],
+        "properties": {
+          "opId": {
+            "type": "string",
+            "pattern": "^op-[A-Za-z0-9_-]+$"
+          },
+          "changeId": {
+            "type": "string",
+            "pattern": "^chg-[A-Za-z0-9_-]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "slide.replace_deck",
+              "slide.add_many",
+              "text.set_title",
+              "text.set_body",
+              "notes.set",
+              "text.replace",
+              "selection.format",
+              "table.create_slide",
+              "chart.create_shape_bar_slide"
+            ]
+          },
+          "risk": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "expected": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "args": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 160
+          }
+        }
+      }
+    },
+    "legacyActions": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["type"],
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^chg-[A-Za-z0-9_-]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "replace_deck",
+              "add_slides",
+              "set_title",
+              "set_body",
+              "set_notes",
+              "replace_text",
+              "format_selection",
+              "add_table_slide",
+              "add_bar_chart_slide"
+            ]
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string" }
+        }
+      }
+    }
+  }
+}

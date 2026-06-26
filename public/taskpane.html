@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Local GPT for PowerPoint</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <div class="brand">Local GPT</div>
+        <div id="status" class="status">Codex OAuth 확인 중</div>
+      </div>
+      <button id="refreshContext" class="iconButton" title="현재 선택/덱 문맥 새로고침">↻</button>
+    </header>
+
+    <section class="contextStrip">
+      <div id="pptContext" class="contextText">PowerPoint 문맥을 읽는 중...</div>
+      <button id="attachButton" class="ghostButton">파일 추가</button>
+      <button id="clipboardImageButton" class="ghostButton">&#53364;&#47549;&#48372;&#46300; &#44536;&#47548;</button>
+      <input id="sourceFile" type="file" multiple>
+    </section>
+
+    <section id="attachmentList" class="attachments"></section>
+
+    <main id="chat" class="chat">
+      <div class="message assistant">
+        <div class="bubble">
+          PowerPoint 안에서 바로 작업합니다. 새 발표자료를 만들거나, 기존 덱을 고치거나, 선택한 텍스트 상자의 글꼴/크기/배치까지 조정하라고 말해 주세요.
+        </div>
+      </div>
+    </main>
+
+    <section id="permissionCard" class="permission hidden">
+      <div class="permissionTitle">프레젠테이션 편집 허용</div>
+      <div id="planSummary" class="permissionSummary"></div>
+      <ol id="stepList" class="steps"></ol>
+      <div class="outlineTools">
+        <button id="selectAllChanges" class="miniButton">전체 선택</button>
+        <button id="clearAllChanges" class="miniButton">전체 해제</button>
+      </div>
+      <div id="outlineList" class="outlineList"></div>
+      <div id="previewPanel" class="previewPanel hidden">
+        <div class="previewTitle">미리보기</div>
+        <div id="previewList" class="previewList"></div>
+        <div class="previewSafe">미리보기는 복사본에서 생성되며 현재 덱을 수정하지 않았습니다.</div>
+      </div>
+      <div class="permissionActions">
+        <button id="allowEdit">바로 적용</button>
+        <button id="commitPreview" class="hidden">이 변경 적용</button>
+        <button id="cancelPlan" class="secondary">취소</button>
+      </div>
+    </section>
+
+    <footer id="composer" class="composer">
+      <div class="modeRow">
+        <label><input type="radio" name="requestedMode" value="edit"> 편집</label>
+        <label><input type="radio" name="requestedMode" value="review" checked> 검토만</label>
+        <button id="rollbackLast" class="miniButton hidden">마지막 AI 편집 백업 열기</button>
+      </div>
+      <textarea id="prompt" placeholder="예: 프랑스 혁명의 원인과 의의를 고등학생 강의자료 5장으로 만들어줘. 또는 선택한 상자의 글꼴이 작고 빈 공간이 커서 적절히 재조정해줘."></textarea>
+      <div class="composerActions">
+        <button id="send">보내기</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="taskpane.js"></script>
+</body>
+</html>

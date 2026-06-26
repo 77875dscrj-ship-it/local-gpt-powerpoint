@@ -1,0 +1,19 @@
+.env
+
+# Local HTTPS certificates are generated per machine.
+certs/
+*.pfx
+*.key
+
+# Runtime state may contain user decks, pasted images, previews, and model outputs.
+runtime/
+
+# Dependency folders and package-manager caches.
+node_modules/
+.npm/
+
+# OS/editor noise.
+Thumbs.db
+.DS_Store
+*.tmp
+*.log

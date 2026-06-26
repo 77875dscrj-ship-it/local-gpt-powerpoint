@@ -1,0 +1,438 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: "Malgun Gothic", "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+  color: #202124;
+  background: #f7f7fb;
+}
+
+button,
+textarea {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.app {
+  box-sizing: border-box;
+  min-height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #dedee8;
+}
+
+.brand {
+  font-size: 20px;
+  color: #c43b35;
+  line-height: 1.2;
+}
+
+.status {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #5f6368;
+  overflow-wrap: anywhere;
+}
+
+.iconButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #c9c9d6;
+  background: #fff;
+  color: #393946;
+  cursor: pointer;
+}
+
+.contextStrip {
+  padding: 10px 12px;
+  background: #fbfbfd;
+  border-bottom: 1px solid #dedee8;
+}
+
+.contextText {
+  color: #4b4f5c;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ghostButton {
+  margin-top: 8px;
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid #a8a8b7;
+  background: #ffffff;
+  color: #343744;
+  cursor: pointer;
+}
+
+#sourceFile {
+  display: none;
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.attachmentChip {
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid #d4d2e8;
+  background: #ffffff;
+  color: #4b3a84;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.attachmentChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attachmentChip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.imageAttachment img {
+  width: 38px;
+  height: 28px;
+  object-fit: cover;
+  border: 1px solid #dedee8;
+  background: #f8f8fb;
+  flex: 0 0 auto;
+}
+
+.attachmentRemove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #c8c6d8;
+  background: #ffffff;
+  color: #5f6368;
+  cursor: pointer;
+  line-height: 16px;
+  flex: 0 0 auto;
+}
+
+.chat {
+  box-sizing: border-box;
+  min-height: 220px;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.message {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.message.assistant {
+  justify-content: flex-start;
+}
+
+.bubble {
+  box-sizing: border-box;
+  max-width: 92%;
+  padding: 9px 10px;
+  border: 1px solid #dedee8;
+  background: #ffffff;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.user .bubble {
+  border-color: #5b45a0;
+  background: #5b45a0;
+  color: #ffffff;
+}
+
+.thinking .bubble {
+  color: #5f6368;
+}
+
+.permission {
+  margin: 0 12px 10px;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #c9c1dd;
+}
+
+.permission.hidden {
+  display: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.permissionTitle {
+  font-weight: 700;
+  color: #2f2f3a;
+}
+
+.permissionSummary {
+  margin-top: 6px;
+  color: #4b4f5c;
+  line-height: 1.4;
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+
+.steps li {
+  margin-bottom: 7px;
+}
+
+.steps strong,
+.steps span {
+  display: block;
+  line-height: 1.35;
+}
+
+.steps span {
+  color: #666b78;
+  font-size: 12px;
+}
+
+.outlineTools {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.miniButton {
+  flex: 1;
+  min-height: 28px;
+  border: 1px solid #c8c6d8;
+  background: #ffffff;
+  color: #343744;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.outlineList {
+  margin-top: 8px;
+}
+
+.outlineEmpty {
+  padding: 8px;
+  border: 1px solid #dedee8;
+  background: #fbfbfd;
+  color: #666b78;
+  line-height: 1.4;
+}
+
+.outlineCard {
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #dedee8;
+  background: #fbfbfd;
+}
+
+.outlineCard.risk-medium {
+  border-color: #d8b85b;
+  background: #fffaf0;
+}
+
+.outlineCard.risk-high {
+  border-color: #d97a7a;
+  background: #fff5f5;
+}
+
+.outlineHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.outlineHead input {
+  margin-top: 3px;
+}
+
+.outlineTitleBox {
+  min-width: 0;
+  flex: 1;
+}
+
+.outlineTitleBox strong,
+.outlineTitleBox em {
+  display: block;
+  line-height: 1.35;
+}
+
+.outlineTitleBox em {
+  margin-top: 2px;
+  color: #666b78;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.outlineKey {
+  margin-top: 6px;
+  color: #343744;
+  line-height: 1.4;
+}
+
+.changeList {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.changeList li {
+  margin-bottom: 3px;
+  color: #4b4f5c;
+  line-height: 1.35;
+}
+
+.outlineMeta {
+  margin-top: 6px;
+  color: #6a6f7c;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.previewPanel {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #dedee8;
+}
+
+.previewTitle {
+  font-weight: 700;
+  color: #2f2f3a;
+}
+
+.previewCard {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #dedee8;
+  background: #fbfbfd;
+}
+
+.previewSlideTitle {
+  font-weight: 700;
+  color: #343744;
+  line-height: 1.35;
+}
+
+.previewLabel {
+  margin-top: 7px;
+  color: #666b78;
+  font-size: 11px;
+}
+
+.previewCard img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 4px;
+  border: 1px solid #d7d7e2;
+  background: #ffffff;
+}
+
+.previewSafe {
+  margin-top: 6px;
+  color: #276749;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.permissionActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.permissionActions button,
+.composerActions button {
+  min-height: 34px;
+  border: 1px solid #5b45a0;
+  background: #5b45a0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.permissionActions button {
+  flex: 1;
+}
+
+button.secondary {
+  border-color: #aaa8b8;
+  background: #ffffff;
+  color: #30323c;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.composer {
+  padding: 10px 12px 12px;
+  background: #ffffff;
+  border-top: 1px solid #dedee8;
+}
+
+.modeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #4b4f5c;
+  font-size: 12px;
+}
+
+.modeRow label {
+  white-space: nowrap;
+}
+
+.modeRow .miniButton {
+  flex: 1 1 100%;
+}
+
+.composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 82px;
+  max-height: 170px;
+  resize: vertical;
+  padding: 9px;
+  border: 1px solid #c7c7d4;
+  background: #fff;
+  color: #202124;
+  line-height: 1.4;
+}
+
+.composerActions {
+  margin-top: 8px;
+}
+
+.composerActions button {
+  width: 100%;
+}
