@@ -554,6 +554,29 @@ function isReadOnlyRequest(message) {
   return readOnlyScore > 0 && editScore === 0;
 }
 
+function nullableNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function nullableBoolean(value) {
+  if (value === undefined || value === null || value === "") return null;
+  return !!value;
+}
+
+function normalizeParagraph(paragraph) {
+  const source = paragraph && typeof paragraph === "object" ? paragraph : {};
+  return {
+    lineSpacing: nullableNumber(source.lineSpacing),
+    spaceBefore: nullableNumber(source.spaceBefore),
+    spaceAfter: nullableNumber(source.spaceAfter),
+    lineRuleWithin: nullableNumber(source.lineRuleWithin),
+    lineRuleBefore: nullableNumber(source.lineRuleBefore),
+    lineRuleAfter: nullableNumber(source.lineRuleAfter),
+  };
+}
+
 function normalizeShape(shape) {
   const source = shape && typeof shape === "object" ? shape : {};
   const text = String(source.text || source.textPreview || "");
@@ -573,7 +596,11 @@ function normalizeShape(shape) {
     rotation: source.rotation !== undefined && source.rotation !== null ? Number(source.rotation) : 0,
     textPreview: limitInlineText(text, MAX_SHAPE_TEXT_CHARS),
     textLength: Number(source.textLength) || text.length,
+    fontName: String(source.fontName || ""),
     fontSize: Number(source.fontSize) || 0,
+    bold: nullableBoolean(source.bold),
+    fontRgb: nullableNumber(source.fontRgb),
+    paragraph: normalizeParagraph(source.paragraph),
     hasTextFrame: !!source.hasTextFrame,
     hasTable: !!source.hasTable,
     hasChart: !!source.hasChart,
@@ -624,6 +651,9 @@ function shapeMapForPrompt(shapeMap) {
     slideIndex: slide.slideIndex,
     slideId: slide.slideId,
     title: slide.title || "",
+    designName: slide.designName || "",
+    layoutName: slide.layoutName || "",
+    layoutIndex: slide.layoutIndex || null,
     shapeCount: slide.shapeCount || 0,
     shapeMapFingerprint: slide.shapeMapFingerprint || "",
     shapes: (slide.shapes || []).slice(0, MAX_PROMPT_SHAPES).map((shape) => ({
@@ -640,9 +670,16 @@ function shapeMapForPrompt(shapeMap) {
       height: shape.height,
       textPreview: shape.textPreview,
       textLength: shape.textLength,
+      fontName: shape.fontName,
       fontSize: shape.fontSize,
+      bold: shape.bold,
+      fontRgb: shape.fontRgb,
+      paragraph: shape.paragraph,
+      hasTextFrame: shape.hasTextFrame,
       hasTable: shape.hasTable,
       hasChart: shape.hasChart,
+      fillRgb: shape.fillRgb,
+      lineRgb: shape.lineRgb,
       tags: shape.tags,
       shapeFingerprint: shape.shapeFingerprint,
     })),
@@ -673,7 +710,7 @@ function freezeSelectionTarget(context) {
   const slideId = selection.slideId !== undefined && selection.slideId !== null ? Number(selection.slideId) : Number(context.slideId || 0);
   return {
     type: "shape_range",
-    capturedAt: new Date().toISOString(),
+    capturedAt: context.contextCapturedAt || context.capturedAt || new Date().toISOString(),
     slideIndex,
     slideId: slideId || null,
     selectionFingerprint: selection.selectionFingerprint || null,
@@ -687,7 +724,11 @@ function freezeSelectionTarget(context) {
       height: shape.height,
       textPreview: shape.textPreview,
       textLength: shape.textLength,
+      fontName: shape.fontName,
       fontSize: shape.fontSize,
+      bold: shape.bold,
+      fontRgb: shape.fontRgb,
+      paragraph: shape.paragraph,
       shapeFingerprint: shape.shapeFingerprint,
     })),
   };
@@ -713,8 +754,74 @@ function assertFrozenSelectionActions(executionPlan, statusCode) {
   });
 }
 
+function compactCountMap(map, maxItems) {
+  if (!map || typeof map !== "object") return [];
+  return Object.keys(map)
+    .map((name) => ({ name, count: Number(map[name]) || 0 }))
+    .filter((item) => item.name)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, maxItems || 12);
+}
+
+function compactLayout(layout) {
+  const source = layout && typeof layout === "object" ? layout : {};
+  return {
+    name: String(source.name || ""),
+    index: nullableNumber(source.index),
+    matchingName: String(source.matchingName || ""),
+    shapeCount: nullableNumber(source.shapeCount),
+    placeholderCount: nullableNumber(source.placeholderCount),
+    textPlaceholderCount: nullableNumber(source.textPlaceholderCount),
+  };
+}
+
+function compactTemplateContext(context) {
+  const template = context && context.template && typeof context.template === "object" ? context.template : {};
+  const theme = template.theme && typeof template.theme === "object" ? template.theme : {};
+  const activeSlideMap = context && context.activeSlideShapeMap;
+  const activeSlide = Array.isArray(activeSlideMap && activeSlideMap.slides) ? activeSlideMap.slides[0] || {} : {};
+  const usedLayouts = compactCountMap(template.usedLayouts, 16);
+  const usedDesigns = compactCountMap(template.usedDesigns, 8);
+  const activeLayoutName = String(activeSlide.layoutName || "");
+  const usedLayoutNames = usedLayouts.reduce((acc, item) => {
+    acc[item.name] = true;
+    return acc;
+  }, {});
+  const designs = Array.isArray(template.designs) ? template.designs.slice(0, 8).map((design) => {
+    const layouts = Array.isArray(design.layouts) ? design.layouts : [];
+    const compactLayouts = layouts
+      .filter((layout) => !usedLayouts.length || usedLayoutNames[String(layout && layout.name || "")] || String(layout && layout.name || "") === activeLayoutName)
+      .slice(0, 12)
+      .map(compactLayout);
+    return {
+      name: String(design.name || ""),
+      index: nullableNumber(design.index),
+      slideMasterName: String(design.slideMasterName || ""),
+      customLayoutCount: nullableNumber(design.customLayoutCount),
+      layouts: compactLayouts,
+    };
+  }) : [];
+
+  return {
+    theme: {
+      name: String(theme.name || ""),
+      headingFont: String(theme.headingFont || ""),
+      bodyFont: String(theme.bodyFont || ""),
+    },
+    usedLayouts,
+    usedDesigns,
+    activeSlide: {
+      designName: String(activeSlide.designName || ""),
+      layoutName: activeLayoutName,
+      layoutIndex: nullableNumber(activeSlide.layoutIndex),
+    },
+    designs,
+  };
+}
+
 function augmentContext(context) {
   const out = context && typeof context === "object" ? context : {};
+  out.contextCapturedAt = out.contextCapturedAt || new Date().toISOString();
   const slides = Array.isArray(out.slides) ? out.slides : [];
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i] || {};
@@ -742,6 +849,8 @@ function augmentContext(context) {
       slides: [out.activeSlideShapeMap],
     });
   }
+  out.templateContext = compactTemplateContext(out);
+  out.templateFingerprint = sha256(JSON.stringify(out.templateContext));
   const fingerprintBasis = {
     presentationFullName: out.presentationFullName || "",
     slideCount: out.slideCount || 0,
@@ -1259,6 +1368,29 @@ function planBridgePayload(planRecord, executionPlan) {
   };
 }
 
+function annotateNoOpResult(result, executionPlan) {
+  const out = result && typeof result === "object" ? result : { ok: true, results: [] };
+  const results = Array.isArray(out.results) ? out.results : [];
+  const hasFormatSelection = executionHasAction(executionPlan, "format_selection");
+  const formatResults = results.filter((item) => item && item.type === "format_selection");
+  if (!hasFormatSelection || !formatResults.length) return out;
+
+  formatResults.forEach((item) => {
+    if (Number(item.changed || 0) === 0) {
+      item.noOp = true;
+      item.noOpReason = "변경 없음: 선택 영역 서식이 이미 요청한 값입니다.";
+    }
+  });
+
+  const allFormatResultsNoOp = formatResults.every((item) => Number(item.changed || 0) === 0);
+  const allResultsAreFormatSelection = results.length === formatResults.length;
+  if (allFormatResultsNoOp && allResultsAreFormatSelection) {
+    out.noOp = true;
+    out.noOpReason = "변경 없음: 선택 영역 서식이 이미 요청한 값입니다.";
+  }
+  return out;
+}
+
 function previewPlan(planId, selectedChangeIds, cb) {
   let planRecord;
   try {
@@ -1277,7 +1409,7 @@ function previewPlan(planId, selectedChangeIds, cb) {
     let executionPlan;
     let transaction;
     try {
-      executionPlan = compileExecutionPlan(planRecord.presentationPlan, currentContext, planRecord.planId, selectedChangeIds);
+      executionPlan = compileExecutionPlan(planRecord.presentationPlan, planRecord.context, planRecord.planId, selectedChangeIds);
       if (!executionPlan.legacyActions.length) {
         const err = new Error("선택된 편집 operation이 없습니다.");
         err.statusCode = 409;
@@ -1511,14 +1643,15 @@ function commitTransaction(transactionId, approval, cb) {
           assistantMessage: "",
           actions: transaction.executionPlan.legacyActions,
         };
-        runBridge("apply-json", JSON.stringify(bridgePlan), (applyErr, result) => {
-        if (applyErr) {
-          transaction.status = "recovery_required";
-          transaction.error = applyErr.message;
-          saveTransaction(transaction);
-          commitLock = null;
-          return cb(applyErr);
-        }
+        runBridge("apply-json", JSON.stringify(bridgePlan), (applyErr, rawResult) => {
+          if (applyErr) {
+            transaction.status = "recovery_required";
+            transaction.error = applyErr.message;
+            saveTransaction(transaction);
+            commitLock = null;
+            return cb(applyErr);
+          }
+          const result = annotateNoOpResult(rawResult, transaction.executionPlan);
         const finishAfterApply = () => getContextSnapshot((afterErr, afterContext) => {
           transaction.deckIdentity.deckFingerprintAtCommit = afterContext && afterContext.deckFingerprint ? afterContext.deckFingerprint : null;
           if (transaction.commitTarget) {
@@ -1683,8 +1816,8 @@ function buildPlannerPrompt(message, sourceText, history, context, readOnlyInten
     `- Requested mode: ${requestedMode}.`,
     `- Default UI mode is ${POLICIES.defaultMode || "review"}. In review mode, legacyActions must stay empty.`,
     "- Whole-deck replacement must be treated as a rebuilt-copy workflow, not a direct live-deck overwrite.",
-    "- Selection formatting is allowed only for the currently selected shape range; the server freezes the target shape IDs and fingerprints before preview.",
-    "- If the user asks to improve spacing, readability, size, position, color, or layout of a selected block, use format_selection without any text replacement. For line spacing, set lineSpacing such as 1.15 or 1.25. For paragraph gaps, set spaceBefore/spaceAfter such as 0.1 to 0.3.",
+    "- Selection formatting is allowed only for the shape range that was selected when the plan was created; the server freezes the target shape IDs and fingerprints before preview.",
+    "- For selected-block formatting, only include exact numeric fields when the user gives an exact value or the current style context makes a safe exact value clear. For relative requests like increase/decrease line spacing or paragraph gaps, do not invent absolute lineSpacing, spaceBefore, or spaceAfter values; describe the intent and direction in assistantMessage, intent, outline, or warnings until safer relative-format tooling exists.",
     "- If the user asks to rewrite selected text, use replace_text or another explicit text action; do not put rewritten prose into format_selection.text.",
     `- Server read-only classification: ${readOnlyIntent ? "true" : "false"}.`,
     "- If Server read-only classification is true, legacyActions must be [] and requiresApproval must be false. Put the requested analysis directly in assistantMessage.",
@@ -1718,8 +1851,10 @@ function buildPlannerPrompt(message, sourceText, history, context, readOnlyInten
       slideWidth: context.slideWidth,
       slideHeight: context.slideHeight,
       deckFingerprint: context.deckFingerprint,
+      templateFingerprint: context.templateFingerprint,
       slides: slidesForPrompt,
       activeSlideShapeMap,
+      templateContext: context.templateContext || compactTemplateContext(context),
       selection,
     })}`,
     "",
@@ -1819,7 +1954,7 @@ function directCommitPlan(planId, selectedChangeIds, cb) {
     let executionPlan;
     let transaction;
     try {
-      executionPlan = compileExecutionPlan(planRecord.presentationPlan, currentContext, planRecord.planId, selectedChangeIds);
+      executionPlan = compileExecutionPlan(planRecord.presentationPlan, planRecord.context, planRecord.planId, selectedChangeIds);
       if (!executionPlan.legacyActions.length) {
         const err = new Error("선택된 편집 operation이 없습니다.");
         err.statusCode = 409;

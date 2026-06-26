@@ -12,17 +12,20 @@ This is not a full primitive-operation rewrite. It is a small harness safety ste
 
 ## Progress
 
-- [ ] Initial investigation of `server.js`, `scripts/ppt-bridge.ps1`, schemas, and taskpane result reporting is complete.
-- [ ] Richer shape/style/paragraph fields are preserved through `normalizeShape`, `augmentSelection`, and `shapeMapForPrompt`.
-- [ ] Compact template context and separate `templateFingerprint` are added without changing `deckFingerprint` semantics.
-- [ ] Planner prompt no longer tells the model to guess `lineSpacing` values such as `1.15` or `1.25` for relative requests.
-- [ ] `format_selection` target freezing uses the plan creation context, not the commit-time active selection.
-- [ ] Minimal no-op reporting is added for formatting actions where all target changes report `changed = 0`.
-- [ ] Validation commands and any manual test notes are recorded.
+- [x] (2026-06-26 15:06 local) Initial investigation of `server.js`, `scripts/ppt-bridge.ps1`, schemas, and taskpane result reporting is complete.
+- [x] (2026-06-26 15:09 local) Richer shape/style/paragraph fields are preserved through `normalizeShape`, `augmentSelection`, and `shapeMapForPrompt`.
+- [x] (2026-06-26 15:09 local) Compact template context and separate `templateFingerprint` are added without changing `deckFingerprint` semantics.
+- [x] (2026-06-26 15:10 local) Planner prompt no longer tells the model to guess `lineSpacing` values such as `1.15` or `1.25` for relative requests.
+- [x] (2026-06-26 15:10 local) `format_selection` target freezing uses the plan creation context, not the commit-time active selection.
+- [x] (2026-06-26 15:11 local) Minimal no-op reporting is added for formatting actions where all target changes report `changed = 0`.
+- [x] (2026-06-26 15:14 local) Validation commands and any manual test notes are recorded.
 
 ## Surprises & Discoveries
 
-Record findings here while working. Examples might include: a field returned by PowerShell has an unexpected shape, a test command is unavailable, or a preview path behaves differently from direct commit.
+- The current Codex thread folder was empty except for `work/` and `outputs/`; the requested repo files were found at `C:\Users\saman\Documents\Codex\2026-06-25\gpt-for-powerpoint\outputs\local-gpt-powerpoint`.
+- `node` was not available on PATH in this shell. Validation used the bundled Node executable at `C:\Users\saman\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`.
+- `scripts/ppt-bridge.ps1` already returned font, paragraph, layout, design, and theme information. The server was the place dropping most of that read-only context before prompting.
+- `previewPlan` and `directCommitPlan` recompiled plans with the current context. That meant `format_selection` could refreeze whichever shape was active at preview or commit time.
 
 ## Decision Log
 
@@ -38,9 +41,21 @@ Record findings here while working. Examples might include: a field returned by 
   Rationale: A request like "increase spacing" is meaningful only relative to the current value. Guessing `1.15` can be wrong if the current value is already higher.
   Date/Author: 2026-06-26 / planning handoff
 
+- Decision: Recompile selected actions from `planRecord.context` in preview/direct commit.
+  Rationale: `planRecord.context` is the snapshot captured when the plan was created. Current context is still used for conflict checks, but not for selecting a new target shape.
+  Date/Author: 2026-06-26 / Codex
+
+- Decision: Keep no-op detection minimal and server-led.
+  Rationale: The bridge already reports `changed` per formatting target. Marking zero-change `format_selection` results with `noOp` avoids a larger expected-diff verifier in this task.
+  Date/Author: 2026-06-26 / Codex
+
 ## Outcomes & Retrospective
 
-Fill this in after implementation. Include changed files, validation commands, whether a live PowerPoint smoke test was possible, and any remaining risks.
+Implementation is complete. `server.js` now preserves richer shape/style/paragraph observation data, passes compact template/theme/layout context to the planner with a separate `templateFingerprint`, removes prompt wording that encouraged guessed line-spacing values, freezes `format_selection` from plan creation context during preview/direct commit, and marks zero-change formatting results as no-op. `public/taskpane.js` now displays `변경 없음` for those no-op formatting results.
+
+Validation passed for server syntax, taskpane syntax, diff whitespace, and PowerShell bridge parsing. The live PowerPoint smoke test was not run because no `POWERPNT` process was active in this session; that test still needs a running PowerPoint 2016 instance and a selected text box.
+
+Remaining risks: no live COM apply was exercised in this pass, and no-op detection is intentionally minimal. It trusts the bridge's existing `changed` counts and does not compare an expected before/after property diff.
 
 ## Context and Orientation
 
@@ -137,4 +152,39 @@ The changes are source-code edits only. They can be retried safely from a clean 
 
 ## Artifacts and Notes
 
-Add short command outputs and manual smoke-test notes here during implementation.
+Implementation notes:
+
+- `server.js` now keeps `fontName`, `bold`, `fontRgb`, and nested paragraph spacing/rule fields on normalized shapes. Because `augmentSelection` uses `normalizeShape`, selected shapes keep the same richer fields.
+- `server.js` now computes `templateContext` and `templateFingerprint` separately from `deckFingerprint`; the deck fingerprint basis was not expanded.
+- The planner prompt now includes `templateContext` and `templateFingerprint`, and no longer asks the model to invent fixed line-spacing values for relative spacing requests.
+- `previewPlan` and `directCommitPlan` now call `compileExecutionPlan(..., planRecord.context, ...)`; current context remains part of affected-slide conflict checks.
+- `public/taskpane.js` now displays `변경 없음` for no-op `format_selection` results.
+
+Validation evidence:
+
+- `node --check server.js` could not run from PATH because `node` is not installed there.
+- Bundled Node: `C:\Users\saman\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --check server.js` passed.
+- Bundled Node: `C:\Users\saman\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --check public\taskpane.js` passed.
+- `git diff --check` passed. Git printed only LF-to-CRLF working-copy warnings.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "\`$null = [scriptblock]::Create((Get-Content -Raw .\scripts\ppt-bridge.ps1)); Write-Output 'ppt-bridge.ps1 parse ok'"` passed with `ppt-bridge.ps1 parse ok`.
+- `Get-Process POWERPNT -ErrorAction SilentlyContinue` found no running PowerPoint process, so the manual add-in smoke test was not run.
+
+Smoke test evidence added 2026-06-26 16:00 local:
+
+- Repo state check passed: branch `codex-handoff-001`; remote `https://github.com/77875dscrj-ship-it/local-gpt-powerpoint.git`.
+- `node --check server.js` and `node --check public\taskpane.js` still fail from PATH because `node` is not installed there; bundled Node equivalents passed.
+- `git diff --check` passed with only LF-to-CRLF working-copy warnings.
+- `scripts\ppt-bridge.ps1` parse-check passed.
+- Disposable COM bridge smoke passed with `EXECPLAN001_BRIDGE_SMOKE_OK`: frozen selection targeted A even after B was selected before apply, and the second identical apply reported `changedTotal: 0`.
+- Server context API smoke passed: normalized context included `templateContext`, `templateFingerprint`, `deckFingerprint`, shape `fontName`, shape `fontSize`, and paragraph fields including `lineSpacing`.
+- Server apply API no-op smoke passed with `EXECPLAN001_API_NOOP_SMOKE_OK`: result contained `noOp: true`, target result `changed: 0`, and a non-empty Korean no-op reason beginning with `변경 없음`.
+- Prompt safety static check passed: `server.js` and `public\taskpane.js` no longer contain `1.15`, `1.25`, or the old line-spacing guess wording.
+- Full Office taskpane/Codex OAuth UI smoke was not run. It requires manual interaction inside the PowerPoint add-in taskpane; the automated pass covered code parse, bridge behavior, server context, server no-op reporting, and taskpane no-op display code.
+
+Manual UI smoke evidence added 2026-06-26 16:23 local:
+
+- User manually selected a PowerPoint text box and asked: `선택한 블록의 줄간격을 조금 넓혀줘.`
+- The taskpane did not blindly apply an arbitrary `lineSpacing` value such as `1.15` or `1.25`.
+- The taskpane safely refused the relative spacing edit and explained that an exact value is needed.
+- The taskpane also showed `변경 없음` for no-op formatting.
+- This is acceptable for ExecPlan 001 because this plan is about safety, observation preservation, prompt safety, frozen selection, and no-op reporting. The remaining UX gap belongs in ExecPlan 002 as a deterministic relative formatting compiler.
