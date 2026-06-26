@@ -754,6 +754,299 @@ function assertFrozenSelectionActions(executionPlan, statusCode) {
   });
 }
 
+function uniqueValues(values) {
+  const seen = {};
+  const out = [];
+  (values || []).forEach((value) => {
+    if (!value || seen[value]) return;
+    seen[value] = true;
+    out.push(value);
+  });
+  return out;
+}
+
+function parseRelativeSelectionFormattingIntent(message) {
+  const text = String(message || "").toLowerCase();
+  if (!text.trim()) return null;
+  const hasSelectionHint = /선택|블록|텍스트|selected|selection/i.test(text);
+  if (!hasSelectionHint) return null;
+
+  const fields = [];
+  if (/줄\s*간격|줄간격|행간|line\s*spacing/i.test(text)) fields.push("lineSpacing");
+  if (/문단\s*(뒤|후)?\s*간격|단락\s*(뒤|후)?\s*간격|paragraph\s*spacing|space\s*after/i.test(text)) fields.push("spaceAfter");
+  if (/글자|글꼴|폰트|font\s*size/i.test(text) || (!fields.length && /텍스트|text/i.test(text) && /크게|작게|키워|줄여|increase|decrease|larger|smaller/i.test(text))) {
+    fields.push("fontSize");
+  }
+
+  const uniqueFields = uniqueValues(fields);
+  if (!uniqueFields.length) return null;
+  if (uniqueFields.length > 1) {
+    return {
+      detected: true,
+      supported: false,
+      reason: "여러 서식 대상이 함께 감지되었습니다. 한 번에 글꼴 크기, 줄간격, 문단 뒤 간격 중 하나만 요청해 주세요.",
+    };
+  }
+
+  const hasIncrease = /넓혀|넓히|늘려|늘림|늘린다|키워|키우|크게|increase|larger|more/i.test(text);
+  const hasDecrease = /줄여|줄여줘|줄임|줄인다|작게|좁혀|좁히|decrease|smaller|less/i.test(text);
+  if (hasIncrease === hasDecrease) {
+    return {
+      detected: true,
+      supported: false,
+      reason: "서식을 늘릴지 줄일지 명확하지 않습니다. 예: '조금 넓혀줘' 또는 '조금 줄여줘'처럼 요청해 주세요.",
+    };
+  }
+
+  return {
+    detected: true,
+    supported: true,
+    field: uniqueFields[0],
+    direction: hasIncrease ? "increase" : "decrease",
+    strength: "small",
+    source: "user_message",
+  };
+}
+
+function activeSlideShapesForContext(context) {
+  const slides = Array.isArray(context && context.activeSlideShapeMap && context.activeSlideShapeMap.slides)
+    ? context.activeSlideShapeMap.slides
+    : [];
+  return slides.length && Array.isArray(slides[0].shapes) ? slides[0].shapes : [];
+}
+
+function findMatchingActiveShape(context, shape) {
+  const shapes = activeSlideShapesForContext(context);
+  for (let i = 0; i < shapes.length; i++) {
+    const candidate = shapes[i] || {};
+    if (shape.shapeFingerprint && candidate.shapeFingerprint === shape.shapeFingerprint) return candidate;
+    if (shape.id !== null && shape.id !== undefined && candidate.id !== null && candidate.id !== undefined && Number(candidate.id) === Number(shape.id)) return candidate;
+    if (shape.name && candidate.name && String(candidate.name) === String(shape.name)) return candidate;
+  }
+  return null;
+}
+
+function mergeObservedShape(primary, fallback) {
+  const base = primary && typeof primary === "object" ? clone(primary) : {};
+  const extra = fallback && typeof fallback === "object" ? fallback : {};
+  const merged = Object.assign({}, extra, base);
+  merged.paragraph = Object.assign({}, extra.paragraph || {}, base.paragraph || {});
+  return merged;
+}
+
+function resolveRelativeFormattingSelection(context) {
+  const selection = context && context.selection ? context.selection : {};
+  const shapes = Array.isArray(selection.shapes) ? selection.shapes : [];
+  if (!shapes.length) {
+    return { ok: false, reason: "선택된 텍스트 상자가 없습니다. PowerPoint에서 텍스트 상자 하나를 선택해 주세요." };
+  }
+  if (shapes.length !== 1) {
+    return { ok: false, reason: "한 번에 하나의 텍스트 상자만 지원합니다. 텍스트 상자 하나만 선택해 주세요." };
+  }
+
+  const shape = mergeObservedShape(shapes[0], findMatchingActiveShape(context, shapes[0]));
+  if (Number(shape.type) === 6) {
+    return { ok: false, reason: "그룹 도형은 아직 지원하지 않습니다. 그룹 안의 텍스트 상자를 직접 선택해 주세요." };
+  }
+  if (shape.hasTable) {
+    return { ok: false, reason: "표 안의 텍스트 서식은 ExecPlan 002 범위가 아닙니다. 일반 텍스트 상자를 선택해 주세요." };
+  }
+  if (shape.hasChart) {
+    return { ok: false, reason: "차트 안의 텍스트 서식은 ExecPlan 002 범위가 아닙니다. 일반 텍스트 상자를 선택해 주세요." };
+  }
+  if (shape.hasTextFrame !== true) {
+    return { ok: false, reason: "선택한 개체가 텍스트 상자가 아닙니다. 텍스트 상자 하나를 선택해 주세요." };
+  }
+  return { ok: true, shape };
+}
+
+function currentRelativeFormatValue(shape, field) {
+  if (field === "fontSize") {
+    const value = nullableNumber(shape && shape.fontSize);
+    if (value === null || value <= 0) return { ok: false, reason: "현재 글꼴 크기를 읽을 수 없어 안전하게 계산할 수 없습니다." };
+    return { ok: true, value };
+  }
+
+  const paragraph = shape && shape.paragraph && typeof shape.paragraph === "object" ? shape.paragraph : {};
+  if (field === "lineSpacing") {
+    const value = nullableNumber(paragraph.lineSpacing);
+    const rule = nullableNumber(paragraph.lineRuleWithin);
+    if (value === null) return { ok: false, reason: "현재 줄간격 값을 읽을 수 없어 안전하게 계산할 수 없습니다." };
+    if (value < 0.8 || value > 3.0) return { ok: false, reason: "현재 줄간격 값이 안전한 배수 범위(0.80~3.00)를 벗어나 자동 계산하지 않았습니다." };
+    if (rule !== null && rule !== -1) return { ok: false, reason: "현재 줄간격 단위가 배수 방식이 아니어서 자동 계산하지 않았습니다. 정확한 값을 지정해 주세요." };
+    return { ok: true, value };
+  }
+
+  if (field === "spaceAfter") {
+    const value = nullableNumber(paragraph.spaceAfter);
+    if (value === null) return { ok: false, reason: "현재 문단 뒤 간격 값을 읽을 수 없어 안전하게 계산할 수 없습니다." };
+    return { ok: true, value };
+  }
+
+  return { ok: false, reason: "지원하지 않는 상대 서식 요청입니다." };
+}
+
+function roundTo(value, decimals) {
+  const factor = Math.pow(10, decimals || 0);
+  return Math.round(Number(value) * factor) / factor;
+}
+
+function roundToStep(value, step) {
+  return Math.round(Number(value) / step) * step;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function computeRelativeFormatTarget(field, currentValue, direction, strength) {
+  const current = Number(currentValue);
+  if (!Number.isFinite(current)) return { ok: false, reason: "현재 값을 숫자로 읽을 수 없어 안전하게 계산할 수 없습니다." };
+
+  let step;
+  let min;
+  let max;
+  let decimals;
+  let target;
+  if (field === "fontSize") {
+    step = 1.0;
+    min = 6;
+    max = 96;
+    decimals = 1;
+    target = roundToStep(current + (direction === "increase" ? step : -step), 0.5);
+  } else if (field === "lineSpacing") {
+    step = 0.10;
+    min = 0.80;
+    max = 3.00;
+    decimals = 2;
+    target = current + (direction === "increase" ? step : -step);
+  } else if (field === "spaceAfter") {
+    step = 3.0;
+    min = 0;
+    max = 72;
+    decimals = 1;
+    target = current + (direction === "increase" ? step : -step);
+  } else {
+    return { ok: false, reason: "지원하지 않는 상대 서식 요청입니다." };
+  }
+
+  target = roundTo(clamp(target, min, max), decimals);
+  if (direction === "increase" && target <= current) {
+    return { ok: false, noOp: true, reason: "변경 없음: 이미 허용 범위의 최대값이어서 더 늘릴 수 없습니다." };
+  }
+  if (direction === "decrease" && target >= current) {
+    return { ok: false, noOp: true, reason: "변경 없음: 이미 허용 범위의 최소값이어서 더 줄일 수 없습니다." };
+  }
+  return { ok: true, target, current };
+}
+
+function relativeFieldLabel(field) {
+  if (field === "fontSize") return "글꼴 크기";
+  if (field === "lineSpacing") return "줄간격";
+  if (field === "spaceAfter") return "문단 뒤 간격";
+  return "서식";
+}
+
+function reviewOnlyRelativeFormattingPlan(plan, reason) {
+  const out = plan && typeof plan === "object" ? plan : {};
+  out.kind = "review";
+  out.assistantMessage = reason;
+  out.steps = [{ title: "상대 서식 변경 보류", detail: reason }];
+  out.outline = [];
+  out.legacyActions = [];
+  out.requiresApproval = false;
+  out.warnings = Array.isArray(out.warnings) ? out.warnings : [];
+  out.warnings.push(reason);
+  return out;
+}
+
+function emptyFormatSelectionAction(changeId) {
+  return {
+    type: "format_selection",
+    changeId,
+    slide: null,
+    after: null,
+    text: null,
+    find: null,
+    replace: null,
+    fontSize: null,
+    width: null,
+    height: null,
+    left: null,
+    top: null,
+    autofit: null,
+    lineSpacing: null,
+    spaceBefore: null,
+    spaceAfter: null,
+    bold: null,
+    fillRgb: null,
+    title: null,
+    message: null,
+    notes: null,
+    columns: [],
+    rows: [],
+    items: [],
+    slides: [],
+  };
+}
+
+function compileRelativeSelectionFormattingPlan(plan, options) {
+  const opts = options || {};
+  const intent = parseRelativeSelectionFormattingIntent(opts.message || "");
+  if (!intent) return plan;
+  if (!intent.supported) return reviewOnlyRelativeFormattingPlan(plan, intent.reason);
+  if (opts.requestedMode !== "edit" || opts.readOnlyIntent) {
+    return reviewOnlyRelativeFormattingPlan(plan, "검토 모드에서는 서식을 적용하지 않습니다. 편집 모드에서 다시 요청하면 현재 값 기준으로 안전하게 계산합니다.");
+  }
+
+  const selection = resolveRelativeFormattingSelection(opts.context);
+  if (!selection.ok) return reviewOnlyRelativeFormattingPlan(plan, selection.reason);
+
+  const current = currentRelativeFormatValue(selection.shape, intent.field);
+  if (!current.ok) return reviewOnlyRelativeFormattingPlan(plan, current.reason);
+
+  const computed = computeRelativeFormatTarget(intent.field, current.value, intent.direction, intent.strength);
+  if (!computed.ok) return reviewOnlyRelativeFormattingPlan(plan, computed.reason);
+
+  const changeId = "chg-relative-" + intent.field.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase());
+  const action = emptyFormatSelectionAction(changeId);
+  action[intent.field] = computed.target;
+
+  const label = relativeFieldLabel(intent.field);
+  const directionText = intent.direction === "increase" ? "늘림" : "줄임";
+  const detail = `서버가 현재 ${label} ${current.value}에서 ${computed.target}으로 계산했습니다.`;
+  plan.kind = "edit_plan";
+  plan.assistantMessage = `${label}을(를) 안전하게 ${directionText}으로 계산했습니다. 적용 전 검토해 주세요. ${detail}`;
+  plan.intent = Object.assign({}, plan.intent || {}, {
+    relativeSelectionFormatting: {
+      field: intent.field,
+      direction: intent.direction,
+      currentValue: current.value,
+      targetValue: computed.target,
+    },
+  });
+  plan.steps = [{ title: `선택 영역 ${label} ${directionText}`, detail }];
+  plan.outline = [{
+    changeId,
+    title: `선택 영역 ${label} ${directionText}`,
+    keyMessage: detail,
+    slideRef: {
+      slideIndex: opts.context && opts.context.selection ? opts.context.selection.slideIndex || opts.context.slideIndex || null : null,
+      slideId: opts.context && opts.context.selection ? opts.context.selection.slideId || opts.context.slideId || null : null,
+      tempSlideKey: null,
+    },
+    operation: "format_selection",
+    risk: "medium",
+    selected: true,
+    changes: [{ type: "format", summary: detail }],
+  }];
+  plan.legacyActions = [action];
+  plan.requiresApproval = true;
+  plan.warnings = Array.isArray(plan.warnings) ? plan.warnings : [];
+  plan.warnings.push(detail);
+  return plan;
+}
+
 function compactCountMap(map, maxItems) {
   if (!map || typeof map !== "object") return [];
   return Object.keys(map)
@@ -1817,7 +2110,7 @@ function buildPlannerPrompt(message, sourceText, history, context, readOnlyInten
     `- Default UI mode is ${POLICIES.defaultMode || "review"}. In review mode, legacyActions must stay empty.`,
     "- Whole-deck replacement must be treated as a rebuilt-copy workflow, not a direct live-deck overwrite.",
     "- Selection formatting is allowed only for the shape range that was selected when the plan was created; the server freezes the target shape IDs and fingerprints before preview.",
-    "- For selected-block formatting, only include exact numeric fields when the user gives an exact value or the current style context makes a safe exact value clear. For relative requests like increase/decrease line spacing or paragraph gaps, do not invent absolute lineSpacing, spaceBefore, or spaceAfter values; describe the intent and direction in assistantMessage, intent, outline, or warnings until safer relative-format tooling exists.",
+    "- For selected-block formatting, only include exact numeric fields when the user gives an exact value. For relative requests like increase/decrease font size, line spacing, or paragraph gaps, do not invent absolute values; express the relative intent and let the server compute exact fontSize, lineSpacing, or spaceAfter from current observation when supported.",
     "- If the user asks to rewrite selected text, use replace_text or another explicit text action; do not put rewritten prose into format_selection.text.",
     `- Server read-only classification: ${readOnlyIntent ? "true" : "false"}.`,
     "- If Server read-only classification is true, legacyActions must be [] and requiresApproval must be false. Put the requested analysis directly in assistantMessage.",
@@ -1887,6 +2180,7 @@ function createPlan(payload, cb) {
       try {
         raw = extractJsonObject(text);
         plan = normalizePresentationPlan(raw, context);
+        plan = compileRelativeSelectionFormattingPlan(plan, { message, context, requestedMode, readOnlyIntent });
         if (readOnlyIntent) {
           plan.kind = "review";
           plan.legacyActions = [];
@@ -1996,6 +2290,16 @@ function applyLegacyPlan(payload, cb) {
     let executionPlan;
     try {
       plan = normalizePresentationPlan(rawPlan, context);
+      const message = String(payload && (payload.message || rawPlan.message) || "");
+      const requestedModeRaw = String(payload && (payload.requestedMode || payload.mode) || "edit").toLowerCase();
+      const requestedMode = requestedModeRaw === "review" ? "review" : "edit";
+      const readOnlyIntent = requestedMode === "review" || isReadOnlyRequest(message);
+      plan = compileRelativeSelectionFormattingPlan(plan, { message, context, requestedMode, readOnlyIntent });
+      if (readOnlyIntent) {
+        plan.kind = "review";
+        plan.legacyActions = [];
+        plan.requiresApproval = false;
+      }
       validatePresentationPlan(plan);
       if (!plan.legacyActions.length) return cb(null, { ok: true, applied: false, plan, result: { ok: true, results: [] } });
       planId = makeId("plan");

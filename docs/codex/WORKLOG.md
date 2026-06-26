@@ -91,3 +91,51 @@ Manual UI smoke update:
 - The taskpane safely refused the relative spacing edit and explained that an exact value is needed.
 - The taskpane also showed `변경 없음` for no-op formatting.
 - This passes ExecPlan 001's safety goal. The remaining UX gap should be handled in ExecPlan 002 as a deterministic relative formatting compiler.
+
+## 2026-06-26 - ExecPlan 002 deterministic relative formatting compiler
+
+Summary: Implemented `docs/codex/EXECPLAN_002_RELATIVE_FORMATTING_COMPILER.md` only. The server now detects supported relative selected text-shape formatting requests and computes exact `format_selection` values from the current PowerPoint observation instead of asking the model to guess. The implementation covers font size, paragraph line spacing, and paragraph `spaceAfter`, while safely refusing missing values, review mode, no selection, multiple selections, tables, charts, grouped shapes, unsupported line-spacing units, and unsafe line-spacing ranges.
+
+Changed files:
+
+- `server.js`
+- `docs/codex/EXECPLAN_002_RELATIVE_FORMATTING_COMPILER.md`
+- `docs/codex/WORKLOG.md`
+
+Implementation notes:
+
+- Product code changed only in `server.js`.
+- `public/taskpane.js` was intentionally left unchanged.
+- `scripts/ppt-bridge.ps1` was intentionally left unchanged; the PowerShell COM bridge remains the only PowerPoint write path.
+- No Office.js write path, SharedRuntime requirement, schema rewrite, `legacyActions` removal, Codex OAuth change, or `deckFingerprint` semantic change was added.
+- Korean parser safety was implemented field-first: `줄간격` / `줄 간격` is treated as the line-spacing field, and only clear expressions such as `줄여`, `작게`, or `좁혀` are treated as decrease.
+- Line spacing compilation rejects unsupported `lineRuleWithin` values and current values outside `0.80` to `3.00`; it does not clamp unsafe large values down for increase requests.
+- In edit mode, the compiler can create the `format_selection` action even when the model returned review/no numeric action.
+
+Validation evidence:
+
+- `node --check server.js` failed from PATH because `node` is not installed there.
+- Bundled Node `C:\Users\saman\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --check server.js` passed.
+- Bundled Node `C:\Users\saman\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe --check public\taskpane.js` passed.
+- `git diff --check` passed with only the LF-to-CRLF working-copy warning for `server.js`.
+- PowerShell bridge parse-check passed with `ppt-bridge.ps1 parse ok`.
+- Static prompt search confirmed the product prompt still tells the model not to invent relative formatting values; `1.15` and `1.25` appear only in documentation as forbidden examples.
+
+Smoke test evidence:
+
+- Disposable PowerPoint smoke script used outside the repository runtime tree: `C:\Users\saman\Documents\Codex\2026-06-26\read-agents-md-docs-codex-plans\work\execplan002-relative-formatting-smoke.ps1`.
+- Final smoke output ended with `EXECPLAN002_RELATIVE_FORMATTING_SMOKE_OK`.
+- Verified `선택한 블록의 줄간격을 조금 넓혀줘` with current `lineSpacing = 1.00` produced target `1.10`.
+- Verified the same request with current `lineSpacing = 1.40` produced target `1.50`, not `1.15` or `1.25`.
+- Verified `선택한 블록의 줄간격을 조금 줄여줘` with current `lineSpacing = 1.40` produced target `1.30`.
+- Verified `선택한 텍스트를 조금 크게 해줘` with current `fontSize = 18` produced target `19`.
+- Verified `선택한 텍스트를 조금 작게 해줘` with current `fontSize = 18` produced target `17`.
+- Verified `spaceAfter = 6` increased to `9`.
+- Verified review mode, unsupported `lineRuleWithin`, unsafe `lineSpacing = 4.00`, no selected shape, multiple selected shapes, table selection, chart selection, and group selection all produced no edit action.
+- Verified existing ExecPlan 001 no-op reporting still returns `noOp: true`.
+- Verified missing current `paragraph.lineSpacing` with a direct server-helper smoke because normal PowerPoint text boxes provide a current COM value.
+
+Remaining risks:
+
+- The smoke tests used disposable decks and direct apply API calls; they did not repeat a full manual taskpane/OAuth interaction after implementation.
+- Combined requests that mix a relative formatting change with unrelated edits are intentionally collapsed to the compiler-created relative `format_selection` action in this initial scope.
